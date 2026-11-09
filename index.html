@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>食堂账单可信分析器 · 可信AI挑战赛</title>
+<style>
+  :root {
+    --ink: #111827; --muted: #6b7280; --line: #e5e7eb; --bg: #f7f8fa;
+    --accent: #2563eb; --ok: #059669; --warn: #b45309; --card: #fff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink); font-size: 15px;
+    font-family: -apple-system, "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", system-ui, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  header { padding: 18px 16px 10px; }
+  h1 { margin: 0 0 6px; font-size: 20px; letter-spacing: .5px; }
+  .tagline { color: var(--muted); font-size: 13px; line-height: 1.5; }
+  main { padding: 0 12px 28px; max-width: 720px; margin: 0 auto; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 14px; margin: 12px 0;
+  }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row > label { font-weight: 600; font-size: 13px; flex: 1; }
+  button {
+    font: inherit; font-size: 13px; padding: 7px 12px; border-radius: 9px; cursor: pointer;
+    border: 1px solid var(--line); background: #fff; color: var(--ink);
+  }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button:active { transform: translateY(1px); }
+  textarea {
+    width: 100%; height: 112px; margin-top: 10px; padding: 10px; border-radius: 10px;
+    border: 1px solid var(--line); font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 12px; line-height: 1.6; resize: vertical;
+  }
+  input[type="text"] {
+    flex: 1; padding: 10px; border-radius: 10px; border: 1px solid var(--line);
+    font: inherit; font-size: 14px; min-width: 0;
+  }
+  .status { margin-top: 8px; font-size: 12px; color: var(--muted); line-height: 1.6; }
+  .status b { color: var(--ink); }
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 10px; }
+  .chip {
+    font-size: 12px; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--line);
+    background: #fafafa; cursor: pointer; color: #374151;
+  }
+  .chip:active { background: #eef2ff; }
+  #answer:empty { display: none; }
+  .num { font-family: ui-monospace, Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+  .big { font-size: 34px; font-weight: 700; letter-spacing: -0.5px; margin: 6px 0 2px; }
+  .qtitle { font-size: 13px; color: var(--muted); }
+  .badge {
+    display: inline-block; font-size: 11px; padding: 3px 9px; border-radius: 999px;
+    background: #ecfdf5; color: var(--ok); border: 1px solid #a7f3d0;
+  }
+  .badge.bad { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+  .sec { margin-top: 14px; }
+  .sec-h { font-size: 12px; font-weight: 700; color: #374151; margin-bottom: 6px; letter-spacing: .3px; }
+  .formula {
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; line-height: 1.7;
+    background: #f9fafb; border: 1px dashed var(--line); border-radius: 9px; padding: 9px 10px;
+    word-break: break-all; color: #1f2937;
+  }
+  ul.basis { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.75; }
+  .caveat {
+    margin-top: 8px; font-size: 12.5px; line-height: 1.7; color: var(--warn);
+    background: #fffbeb; border: 1px solid #fde68a; border-radius: 9px; padding: 9px 10px;
+  }
+  details { margin-top: 12px; }
+  summary { font-size: 13px; cursor: pointer; color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12px; }
+  th, td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; }
+  td.amt { text-align: right; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  tr.hl td { background: #eff6ff; }
+  footer { padding: 0 16px 30px; color: var(--muted); font-size: 11.5px; line-height: 1.7; max-width: 720px; margin: 0 auto; }
+  .cross { display: inline-block; font-size: 11.5px; color: var(--ok); margin-top: 6px; }
+  .cross.bad { color: #b91c1c; }
+</style>
+</head>
+<body>
+<header>
+  <h1>食堂账单可信分析器</h1>
+  <div class="tagline">问一句，它给数字，也给你能核对的每一步：算式、条数、覆盖范围、逐条明细。数字全部由本地代码算出，不经过模型。</div>
+</header>
+
+<main>
+  <section class="card">
+    <div class="row">
+      <label>消费记录（每行一条：日期 时间 商户 金额）</label>
+      <button id="sample">示例数据</button>
+    </div>
+    <textarea id="raw" spellcheck="false" placeholder="2026-09-02 12:03 一食堂 12.5"></textarea>
+    <div class="row" style="margin-top:10px">
+      <button id="parse" class="primary">解析记录</button>
+      <button id="clear">清空</button>
+    </div>
+    <div id="status" class="status">还没有数据。点「示例数据」看一份 2026 年秋季的食堂账单。</div>
+  </section>
+
+  <section class="card">
+    <div class="chips" id="chips"></div>
+    <div class="row">
+      <input id="q" type="text" placeholder="问我：这学期食堂花了多少">
+      <button id="send" class="primary">问</button>
+    </div>
+  </section>
+
+  <section id="answer"></section>
+</main>
+
+<footer>
+  口径说明：默认只统计名称含「食堂」「餐厅」的商户；超市、水果店不计入，除非问题里点名。<br>
+  数据只在本页内存里计算，不发往任何服务器。
+</footer>
+
+<script>
+/* ---------- 数据 ---------- */
+const SAMPLE = `2026-09-02 11:52 一食堂 12.5
+2026-09-02 17:40 一食堂 9.0
+2026-09-03 12:10 二食堂 14.0
+2026-09-03 18:05 三食堂 8.5
+2026-09-04 12:20 一食堂 11.0
+2026-09-05 11:45 二食堂 15.5
+2026-09-05 18:30 校园超市 6.5
+2026-09-06 12:05 一食堂 13.0
+2026-09-08 12:15 三食堂 10.5
+2026-09-09 12:00 一食堂 12.0
+2026-09-09 18:10 一食堂 9.5
+2026-09-10 12:30 二食堂 16.0
+2026-09-11 11:55 一食堂 10.0
+2026-09-12 12:05 三食堂 13.5
+2026-09-15 12:20 一食堂 11.5
+2026-09-15 18:00 二食堂 8.0
+2026-09-16 12:10 一食堂 12.5
+2026-09-17 12:40 三食堂 14.5
+2026-09-18 12:00 一食堂 10.5
+2026-09-19 12:15 二食堂 15.0
+2026-09-22 12:05 一食堂 9.5
+2026-09-23 12:25 三食堂 11.0
+2026-09-24 12:10 一食堂 13.5
+2026-09-25 18:20 一食堂 8.0
+2026-09-26 12:00 二食堂 16.5
+2026-09-29 12:15 一食堂 12.0
+2026-09-30 12:05 三食堂 10.0
+2026-10-08 12:10 一食堂 11.5
+2026-10-09 12:20 二食堂 14.0
+2026-10-10 12:00 一食堂 12.5
+2026-10-11 11:50 三食堂 13.0
+2026-10-12 12:15 一食堂 10.5
+2026-10-13 18:05 二食堂 9.0
+2026-10-14 12:10 一食堂 12.0
+2026-10-15 12:30 三食堂 15.5
+2026-10-16 12:00 一食堂 11.0
+2026-10-19 12:20 二食堂 13.5
+2026-10-20 12:05 一食堂 10.0
+2026-10-21 18:15 三食堂 8.5
+2026-10-22 12:10 一食堂 12.5
+2026-10-23 12:00 二食堂 14.5
+2026-10-26 12:15 一食堂 11.5
+2026-10-27 12:05 三食堂 12.0
+2026-10-28 12:20 一食堂 13.0
+2026-10-29 18:00 二食堂 9.5
+2026-10-30 12:10 一食堂 10.5
+2026-11-02 12:05 一食堂 12.0
+2026-11-03 12:15 三食堂 14.0
+2026-11-04 12:00 一食堂 11.0
+2026-11-05 18:10 二食堂 8.5
+2026-11-06 12:20 一食堂 12.5
+2026-11-09 12:05 一食堂 13.5`;
+
+const round2 = (n) => Math.round(n * 100) / 100;
+const money = (n) => n.toFixed(2);
+const monthOf = (d) => d.slice(0, 7);
+
+function parseRecords(text) {
+  const rows = [], bad = [];
+  String(text || '').split(/\r?\n/).forEach((line, i) => {
+    const s = line.trim();
+    if (!s) return;
+    const m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})\s*(?:(\d{1,2}:\d{2}))?\s+(.+?)\s+(\d+(?:\.\d{1,2})?)\s*$/);
+    if (!m) { bad.push({ line: i + 1, text: s }); return; }
+    rows.push({
+      line: i + 1,
+      date: `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}`,
+      time: m[4] || '',
+      place: m[5].trim(),
+      amount: round2(Number(m[6])),
+    });
+  });
+  rows.sort((a, b) => (a.date === b.date ? (a.time < b.time ? -1 : 1) : a.date < b.date ? -1 : 1));
+  return { rows, bad };
+}
+
+const isCanteen = (place) => /食堂|餐厅|餐屋|美食/.test(place);
+
+function crossCheck(rows) {
+  const direct = round2(rows.reduce((s, r) => s + r.amount, 0));
+  const byMonth = new Map();
+  rows.forEach((r) => {
+    const k = monthOf(r.date);
+    byMonth.set(k, round2((byMonth.get(k) || 0) + r.amount));
+  });
+  const grouped = round2([...byMonth.values()].reduce((s, v) => s + v, 0));
+  return { direct, grouped, ok: direct === grouped };
+}
+
+function placesIn(rows) {
+  const set = new Map();
+  rows.forEach((r) => set.set(r.place, (set.get(r.place) || 0) + 1));
+  return set;
+}
+
+function gapsIn(rows) {
+  const days = [...new Set(rows.map((r) => r.date))].sort();
+  const out = [];
+  for (let i = 1; i < days.length; i++) {
+    const a = new Date(days[i - 1] + 'T00:00:00');
+    const b = new Date(days[i] + 'T00:00:00');
+    const diff = Math.round((b - a) / 86400000);
+    if (diff >= 4) out.push(`${days[i - 1]} 到 ${days[i]} 之间有 ${diff - 1} 天没有记录`);
+  }
+  return out;
+}
+
+/* ---------- 问答 ---------- */
+function answer(question, rows, bad) {
+  const q = String(question || '').trim();
+  if (!rows.length) {
+    return { kind: 'empty', message: '还没有可用的记录。先点「示例数据」或粘贴你的账单，再问。' };
+  }
+  if (!q) {
+    return { kind: 'empty', message: '把问题写进输入框，或者点上面那些问题。' };
+  }
+
+  const months = [...new Set(rows.map((r) => monthOf(r.date)))].sort();
+  const latest = months[months.length - 1];
+
+  // 范围：月份
+  let month = null;
+  const mm = q.match(/(\d{1,2})\s*月/);
+  if (mm) month = `${latest.slice(0, 4)}-${String(mm[1]).padStart(2, '0')}`;
+  else if (/上个月|上月/.test(q)) {
+    const idx = months.indexOf(latest);
+    month = idx > 0 ? months[idx - 1] : null;
+    if (!month) return { kind: 'unsupported', message: `数据里只有 ${months.join('、')}，没有上个月可以算。` };
+  } else if (/这个月|本月|当月/.test(q)) month = latest;
+
+  // 范围：商户
+  const known = placesIn(rows);
+  let place = null;
+  for (const p of known.keys()) {
+    if (q.includes(p) || (p.length > 2 && q.includes(p.slice(0, 2)) && q.length <= 14)) { place = p; break; }
+  }
+
+  let scope = rows.slice();
+  if (month) scope = scope.filter((r) => monthOf(r.date) === month);
+  if (place) scope = scope.filter((r) => r.place === place);
+  else if (!/超市|水果|小店|全部|所有/.test(q)) scope = scope.filter((r) => isCanteen(r.place));
+
+  if (place && !scope.length) {
+    return { kind: 'unsupported', message: `${place} 在 ${month || '这段时间'}没有记录，无法确认。` };
+  }
+  if (!scope.length) {
+    return { kind: 'unsupported', message: `${month || '这段时间'}没有符合条件的记录，无法计算。` };
+  }
+
+  const scopeLabel = [month ? month.replace('-', ' 年 ') + ' 月' : '全部数据', place || (isCanteen(scope[0].place) ? '食堂' : '')]
+    .filter(Boolean).join(' · ');
+
+  const sum = round2(scope.reduce((s, r) => s + r.amount, 0));
+  const basis = [
+    `时间：${scope[0].date} 至 ${scope[scope.length - 1].date}`,
+    `纳入 ${scope.length} 条记录，合计 ${money(sum)} 元`,
+    `商户：${[...new Set(scope.map((r) => r.place))].join('、')}`,
+  ];
+  const caveats = [];
+  if (bad.length) caveats.push(`有 ${bad.length} 行格式没认出来，已跳过（第 ${bad.map((b) => b.line).join('、')} 行），它们不在上面任何数字里。`);
+  const gaps = gapsIn(scope);
+  if (gaps.length) caveats.push(`记录有空档：${gaps.slice(0, 3).join('；')}${gaps.length > 3 ? ' 等' : ''}。这些天可能没吃食堂，也可能没同步，数字按现有记录算。`);
+
+  const cc = crossCheck(scope);
+  const basis_with_check = basis.concat([`交叉校验：逐条相加 ${money(cc.direct)}，按月分组相加 ${money(cc.grouped)}，${cc.ok ? '一致' : '不一致，需要人工核对'}`]);
+
+  // 意图
+  const th = q.match(/超过\s*(\d+(?:\.\d+)?)/);
+  if (th) {
+    const limit = Number(th[1]);
+    const hit = scope.filter((r) => r.amount > limit);
+    const s = round2(hit.reduce((a, r) => a + r.amount, 0));
+    return {
+      kind: 'ok', title: `单笔超过 ${money(limit)} 元的消费`, value: `${hit.length} 笔`, unit: '',
+      sub: `${scopeLabel} · 合计 ${money(s)} 元`,
+      formula: hit.length ? hit.map((r) => money(r.amount)).join(' + ') + ' = ' + money(s) : '没有命中任何记录',
+      basis: basis_with_check, caveats, rows: hit,
+    };
+  }
+
+  if (/最贵|最高|最大一笔|最大的一笔/.test(q)) {
+    const top = scope.reduce((a, b) => (b.amount > a.amount ? b : a));
+    return {
+      kind: 'ok', title: '单笔最贵', value: `¥${money(top.amount)}`,
+      sub: `${scopeLabel} · ${top.date} ${top.time} ${top.place}`,
+      formula: `在 ${scope.length} 条里取最大值：max(${scope.slice(0, 3).map((r) => money(r.amount)).join(', ')}, …) = ${money(top.amount)}`,
+      basis: basis_with_check, caveats, rows: [top],
+    };
+  }
+
+  if (/哪天花|哪天最多|哪天花超/.test(q)) {
+    const byDay = new Map();
+    scope.forEach((r) => byDay.set(r.date, round2((byDay.get(r.date) || 0) + r.amount)));
+    const [day, amt] = [...byDay.entries()].sort((a, b) => b[1] - a[1])[0];
+    const dayRows = scope.filter((r) => r.date === day);
+    return {
+      kind: 'ok', title: '花得最多的一天', value: `¥${money(amt)}`, sub: `${day} · ${scopeLabel}`,
+      formula: dayRows.map((r) => money(r.amount)).join(' + ') + ' = ' + money(amt),
+      basis: basis_with_check.concat([`当天共 ${dayRows.length} 条记录`]), caveats, rows: dayRows,
+    };
+  }
+
+  if (/平均|每餐|一顿/.test(q)) {
+    const avg = round2(sum / scope.length);
+    return {
+      kind: 'ok', title: '平均每笔', value: `¥${money(avg)}`, sub: `${scopeLabel} · 共 ${scope.length} 笔`,
+      formula: `${money(sum)} ÷ ${scope.length} = ${money(avg)}`,
+      basis: basis_with_check, caveats, rows: scope,
+    };
+  }
+
+  if (/几次|多少顿|多少笔|几笔/.test(q)) {
+    return {
+      kind: 'ok', title: '记录条数', value: `${scope.length} 笔`, sub: `${scopeLabel} · 合计 ¥${money(sum)}`,
+      formula: `计数 ${scope.length} 条，金额相加 = ${money(sum)}`,
+      basis: basis_with_check, caveats, rows: scope,
+    };
+  }
+
+  if (/最常|最多去|常去/.test(q) && !place) {
+    const byPlace = new Map();
+    scope.forEach((r) => {
+      const cur = byPlace.get(r.place) || { n: 0, sum: 0 };
+      byPlace.set(r.place, { n: cur.n + 1, sum: round2(cur.sum + r.amount) });
+    });
+    const [p, v] = [...byPlace.entries()].sort((a, b) => b[1].n - a[1].n)[0];
+    return {
+      kind: 'ok', title: '去得最多的商户', value: p, sub: `${v.n} 次 · 合计 ¥${money(v.sum)}`,
+      formula: `${[...byPlace.entries()].map(([k, x]) => `${k} ${x.n} 次`).join(' / ')}，取最大`,
+      basis: basis_with_check, caveats, rows: scope.filter((r) => r.place === p),
+    };
+  }
+
+  if (/食堂|吃饭|餐饮|吃了/.test(q) || /多少|总|合计|一共|花了/.test(q)) {
+    return {
+      kind: 'ok', title: `${scopeLabel}花费`, value: `¥${money(sum)}`, sub: `${scope.length} 笔 · ${scope[0].date} 至 ${scope[scope.length - 1].date}`,
+      formula: scope.length > 4
+        ? `${scope.slice(0, 3).map((r) => money(r.amount)).join(' + ')} + … + ${money(scope[scope.length - 1].amount)}（共 ${scope.length} 笔） = ${money(sum)}`
+        : scope.map((r) => money(r.amount)).join(' + ') + ' = ' + money(sum),
+      basis: basis_with_check, caveats, rows: scope,
+    };
+  }
+
+  return {
+    kind: 'unsupported',
+    message: `这个问题我答不了，也不会瞎猜。现在能回答的是：某段时间花多少、某家食堂花多少、花得最多的一天、单笔最贵、单笔超过某个数的消费、平均每笔、去了几次、最常去哪家。换个问法再试。`,
+  };
+}
+
+/* ---------- 页面 ---------- */
+if (typeof document !== 'undefined') {
+  const $ = (sel) => document.querySelector(sel);
+  const rawEl = $('#raw'), statusEl = $('#status'), answerEl = $('#answer'), qEl = $('#q');
+  let state = { rows: [], bad: [] };
+
+  const CHIPS = [
+    '这学期食堂花了多少',
+    '10 月花了多少',
+    '一食堂花了多少',
+    '哪天花得最多',
+    '单笔最贵的是哪笔',
+    '平均每笔多少',
+    '最常去哪家',
+    '单笔超过 15 元的',
+  ];
+
+  function renderStatus() {
+    const { rows, bad } = state;
+    if (!rows.length) {
+      statusEl.innerHTML = bad.length
+        ? `<b>0</b> 条可用，<b>${bad.length}</b> 行没认出来。格式要是「日期 时间 商户 金额」。`
+        : '还没有数据。点「示例数据」看一份 2026 年秋季的食堂账单。';
+      return;
+    }
+    statusEl.innerHTML = `已解析 <b>${rows.length}</b> 条，${rows[0].date} 至 ${rows[rows.length - 1].date}` +
+      `，共 <b>¥${money(round2(rows.filter((r) => isCanteen(r.place)).reduce((s, r) => s + r.amount, 0)))}</b>` +
+      (bad.length ? `；<b>${bad.length}</b> 行没认出来（第 ${bad.map((b) => b.line).join('、')} 行），不计入` : '');
+  }
+
+  function renderAnswer(a) {
+    if (a.kind === 'empty' || a.kind === 'unsupported') {
+      answerEl.innerHTML = `<section class="card">
+        <span class="badge bad">未作答</span>
+        <div class="sec"><div class="sec-h">说明</div><div style="font-size:13.5px;line-height:1.75">${a.message}</div></div>
+      </section>`;
+      return;
+    }
+    const rows = a.rows || [];
+    const cc = crossCheck(rows);
+    answerEl.innerHTML = `<section class="card">
+      <span class="badge">可核对 · ${rows.length} 条依据</span>
+      <div class="big num">${a.value}</div>
+      <div class="qtitle">${a.title}${a.sub ? ' · ' + a.sub : ''}</div>
+
+      <div class="sec">
+        <div class="sec-h">怎么算的</div>
+        <div class="formula">${a.formula}</div>
+        <div class="cross ${cc.ok ? '' : 'bad'}">✓ 交叉校验：逐条相加 ${money(cc.direct)} = 按月分组相加 ${money(cc.grouped)}</div>
+      </div>
+
+      <div class="sec">
+        <div class="sec-h">依据</div>
+        <ul class="basis">${a.basis.map((b) => `<li>${b}</li>`).join('')}</ul>
+      </div>
+
+      ${a.caveats && a.caveats.length ? `<div class="caveat">${a.caveats.join('<br>')}</div>` : ''}
+
+      <details>
+        <summary>逐条明细（${rows.length} 条，可核对）</summary>
+        <table>
+          <thead><tr><th>日期</th><th>时间</th><th>商户</th><th style="text-align:right">金额</th></tr></thead>
+          <tbody>${rows.map((r) => `<tr><td class="num">${r.date}</td><td class="num">${r.time}</td><td>${r.place}</td><td class="amt">${money(r.amount)}</td></tr>`).join('')}</tbody>
+        </table>
+      </details>
+    </section>`;
+  }
+
+  function run(q) {
+    if (!q.trim()) return;
+    renderAnswer(answer(q, state.rows, state.bad));
+  }
+
+  function parseNow() {
+    state = parseRecords(rawEl.value);
+    renderStatus();
+    answerEl.innerHTML = '';
+  }
+
+  $('#sample').addEventListener('click', () => {
+    rawEl.value = SAMPLE;
+    parseNow();
+    qEl.value = '这学期食堂花了多少';
+    run(qEl.value);
+  });
+  $('#parse').addEventListener('click', parseNow);
+  $('#clear').addEventListener('click', () => {
+    rawEl.value = ''; state = { rows: [], bad: [] }; answerEl.innerHTML = ''; renderStatus();
+  });
+  $('#send').addEventListener('click', () => run(qEl.value));
+  qEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') run(qEl.value); });
+
+  const chips = $('#chips');
+  CHIPS.forEach((c) => {
+    const b = document.createElement('span');
+    b.className = 'chip';
+    b.textContent = c;
+    b.addEventListener('click', () => { qEl.value = c; run(c); });
+    chips.appendChild(b);
+  });
+}
+</script>
+</body>
+</html>
